@@ -58,6 +58,22 @@ final class Builder {
         }
     }
 
+    struct Stats {
+        var steps = 0
+        var images = 0
+        var imageTokens = 0
+        var textTokens = 0
+        var tokens: Int { imageTokens + textTokens }
+    }
+    private(set) var stats = Stats()
+
+    /// Rough Claude cost of one image: downscaled to ≤1568px long edge and ≤1.15MP, then w*h/750.
+    static func imageTokens(width: Int, height: Int) -> Int {
+        let w = Double(width), h = Double(height)
+        let s = min(1, 1568 / max(w, h), (1_150_000 / (w * h)).squareRoot())
+        return Int((w * s) * (h * s) / 750)
+    }
+
     func build() throws -> URL {
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("frames"), withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: dir.appendingPathComponent("composites"), withIntermediateDirectories: true)
@@ -86,7 +102,7 @@ final class Builder {
         md += "- recorded: \(ISO8601DateFormatter().string(from: session.startedAt)), duration \(fmtT(dur))\n"
         md += "- screen: \(session.width)×\(session.height) px @\(session.scale)x (all coordinates below are pixels in that space)\n"
         if let v = session.video { md += "- video: \(dir.appendingPathComponent(v).path) (full recording; timestamps below index into it)\n" }
-        md += "- \(session.steps.count) steps across \(runs.count) window visits\n\n"
+        md += "- \(session.steps.count) steps across \(runs.count) window visits\n{{COST}}\n"
 
         var runNo = 0
         for r in runs {
@@ -109,6 +125,8 @@ final class Builder {
                     let url = dir.appendingPathComponent(name)
                     ImageIO.savePNG(img, to: url)
                     md += "![\(run.window.app) steps](\(url.path))\n\n"
+                    stats.images += 1
+                    stats.imageTokens += Builder.imageTokens(width: img.width, height: img.height)
                 }
             }
             for s in run.steps where s.kind != .windowSwitch {
@@ -124,6 +142,9 @@ final class Builder {
             }
             md += "\n"
         }
+        stats.steps = session.steps.count
+        stats.textTokens = md.count / 4 + 12
+        md = md.replacingOccurrences(of: "{{COST}}", with: "- estimated prompt cost: ~\(stats.tokens) tokens (\(stats.images) images ~\(stats.imageTokens), text ~\(stats.textTokens))\n")
         let out = dir.appendingPathComponent("flow.md")
         try md.write(to: out, atomically: true, encoding: .utf8)
         return out

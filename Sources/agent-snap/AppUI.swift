@@ -6,7 +6,7 @@ import ApplicationServices
 
 @MainActor
 final class AppController: ObservableObject {
-    enum State: Equatable { case idle, starting, recording, building, done(String), failed(String) }
+    enum State: Equatable { case idle, starting, recording, building, done(String, Int), failed(String) }
 
     @Published var state: State = .idle
     @Published var options = Options.load() { didSet { options.save() } }
@@ -85,8 +85,9 @@ final class AppController: ObservableObject {
         Task {
             _ = await rec.stop()
             do {
-                let md = try Builder(dir: rec.outDir, options: options).build()
-                setState(.done(md.path))
+                let builder = try Builder(dir: rec.outDir, options: options)
+                let md = try builder.build()
+                setState(.done(md.path, builder.stats.tokens))
             } catch {
                 setState(.failed("build failed: \(error.localizedDescription)"))
             }
@@ -220,9 +221,9 @@ struct PopoverView: View {
             }
         case .building:
             Label("Building flow.md…", systemImage: "hourglass").font(.caption)
-        case .done(let path):
+        case .done(let path, let tokens):
             VStack(alignment: .leading, spacing: 6) {
-                Label("flow.md ready · \(c.stepCount) steps", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label("flow.md ready · \(c.stepCount) steps · ~\(tokens / 100 * 100 >= 1000 ? String(format: "%.1fk", Double(tokens) / 1000) : "\(tokens)") tokens", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 Text((path as NSString).abbreviatingWithTildeInPath).font(.caption).lineLimit(1).truncationMode(.middle)
                 HStack {
                     Button("Copy prompt") { copy(AppController.prompt(for: path)) }

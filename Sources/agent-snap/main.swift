@@ -41,8 +41,10 @@ case "app":
 case "build":
     guard let dir = args.first else { usage() }
     do {
-        let md = try Builder(dir: URL(fileURLWithPath: dir)).build()
+        let b = try Builder(dir: URL(fileURLWithPath: dir))
+        let md = try b.build()
         print(md.path)
+        fputs("~\(b.stats.tokens) tokens (\(b.stats.images) images ~\(b.stats.imageTokens), text ~\(b.stats.textTokens))\n", stderr)
     } catch {
         fputs("build failed: \(error)\n", stderr); exit(1)
     }
@@ -74,8 +76,10 @@ case "record":
             fputs("stopped. \(session.steps.count) steps, \(session.timeline.count) window segments.\n", stderr)
             if !noBuild {
                 do {
-                    let md = try Builder(dir: outDir).build()
+                    let b = try Builder(dir: outDir)
+                    let md = try b.build()
                     print(md.path)
+                    fputs("~\(b.stats.tokens) tokens (\(b.stats.images) images ~\(b.stats.imageTokens), text ~\(b.stats.textTokens))\n", stderr)
                 } catch { fputs("build failed: \(error)\n", stderr) }
             }
             exit(0)
