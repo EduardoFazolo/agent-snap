@@ -96,6 +96,11 @@ final class AppController: ObservableObject {
 
     private func setState(_ s: State) { state = s; onStateChange?(s) }
 
+    /// What gets pasted into an agent: the file to read and what it is.
+    static func prompt(for path: String) -> String {
+        "Read \(path) and view every image it links. It is a recording of what I did on screen."
+    }
+
     func chooseOutputDir() {
         let p = NSOpenPanel()
         p.canChooseDirectories = true; p.canChooseFiles = false; p.canCreateDirectories = true
@@ -220,7 +225,7 @@ struct PopoverView: View {
                 Label("flow.md ready · \(c.stepCount) steps", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
                 Text((path as NSString).abbreviatingWithTildeInPath).font(.caption).lineLimit(1).truncationMode(.middle)
                 HStack {
-                    Button("Copy path") { copy(path) }
+                    Button("Copy prompt") { copy(AppController.prompt(for: path)) }
                     Button("Open") { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
                     Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)]) }
                 }.controlSize(.small)

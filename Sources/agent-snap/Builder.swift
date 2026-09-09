@@ -85,7 +85,7 @@ final class Builder {
         let dur = session.timeline.last?.end ?? session.steps.last?.t ?? 0
         md += "- recorded: \(ISO8601DateFormatter().string(from: session.startedAt)), duration \(fmtT(dur))\n"
         md += "- screen: \(session.width)×\(session.height) px @\(session.scale)x (all coordinates below are pixels in that space)\n"
-        if let v = session.video { md += "- video: \(v) (full recording; timestamps below index into it)\n" }
+        if let v = session.video { md += "- video: \(dir.appendingPathComponent(v).path) (full recording; timestamps below index into it)\n" }
         md += "- \(session.steps.count) steps across \(runs.count) window visits\n\n"
 
         var runNo = 0
@@ -106,8 +106,9 @@ final class Builder {
             for (imgIdx, chunk) in pack(panels).enumerated() {
                 let name = String(format: "composites/run-%02d-%c.png", runNo, 97 + imgIdx)
                 if let img = compose(chunk) {
-                    ImageIO.savePNG(img, to: dir.appendingPathComponent(name))
-                    md += "![\(run.window.app) steps](\(name))\n\n"
+                    let url = dir.appendingPathComponent(name)
+                    ImageIO.savePNG(img, to: url)
+                    md += "![\(run.window.app) steps](\(url.path))\n\n"
                 }
             }
             for s in run.steps where s.kind != .windowSwitch {
@@ -119,7 +120,7 @@ final class Builder {
             var seen = Set<String>()
             let files = run.steps.flatMap { [$0.before, $0.after].compactMap { $0 } }.filter { seen.insert($0).inserted }
             if !files.isEmpty {
-                md += "\n<details><summary>full frames</summary>\n\n" + files.map { "- \($0)" }.joined(separator: "\n") + "\n\n</details>\n"
+                md += "\n<details><summary>full frames</summary>\n\n" + files.map { "- \(dir.appendingPathComponent($0).path)" }.joined(separator: "\n") + "\n\n</details>\n"
             }
             md += "\n"
         }
