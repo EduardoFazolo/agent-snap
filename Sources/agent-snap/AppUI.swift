@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import ImageIO
 import ApplicationServices
 
 // MARK: - Controller
@@ -41,6 +42,19 @@ final class AppController: ObservableObject {
                 let head = text.prefix(1200)
                 if let m = head.range(of: #"~(\d+) tokens"#, options: .regularExpression) {
                     info.tokens = Int(head[m].dropFirst().split(separator: " ").first ?? "")
+                } else {
+                    // Older session without a cost line: estimate from the files.
+                    var tokens = text.count / 4
+                    let comps = d.appendingPathComponent("composites")
+                    for f in (try? FileManager.default.contentsOfDirectory(at: comps, includingPropertiesForKeys: nil)) ?? []
+                        where f.pathExtension == "png" {
+                        if let src = CGImageSourceCreateWithURL(f as CFURL, nil),
+                           let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+                           let w = props[kCGImagePropertyPixelWidth] as? Int, let h = props[kCGImagePropertyPixelHeight] as? Int {
+                            tokens += Builder.imageTokens(width: w, height: h)
+                        }
+                    }
+                    info.tokens = tokens
                 }
                 if let m = head.range(of: #"- (\d+) steps"#, options: .regularExpression) {
                     info.steps = Int(head[m].dropFirst(2).split(separator: " ").first ?? "")
