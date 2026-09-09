@@ -103,6 +103,7 @@ final class Builder {
         md += "- screen: \(session.width)×\(session.height) px @\(session.scale)x (all coordinates below are pixels in that space)\n"
         if let v = session.video { md += "- video: \(dir.appendingPathComponent(v).path) (full recording; timestamps below index into it)\n" }
         md += "- \(session.steps.count) steps across \(runs.count) window visits\n{{COST}}\n"
+        md += "The images shown inline are the flow. The full frames and video listed under each section are only for zooming in if a step is unclear.\n\n"
 
         var runNo = 0
         for r in runs {

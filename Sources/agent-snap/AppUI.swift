@@ -165,7 +165,7 @@ final class AppController: ObservableObject {
 
     /// What gets pasted into an agent: the file to read and what it is.
     static func prompt(for path: String) -> String {
-        "Read \(path) and view every image it links. It is a recording of what I did on screen."
+        "Read \(path). It summarizes a screen recording of what I did. Look at the images shown inline; the full frames and video listed at the end are only for zooming in if a step is unclear."
     }
 
     func chooseOutputDir() {
