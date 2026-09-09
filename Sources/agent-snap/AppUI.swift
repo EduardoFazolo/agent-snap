@@ -16,6 +16,56 @@ final class AppController: ObservableObject {
     @Published var screenOK = CGPreflightScreenCaptureAccess()
     @Published var axOK = AXIsProcessTrusted()
 
+    struct SessionInfo: Identifiable, Equatable {
+        var id: String { dir.path }
+        var dir: URL
+        var name: String
+        var flow: URL
+        var steps: Int?
+        var tokens: Int?
+        var duration: String?
+    }
+    /// Past recordings, newest first. nil `browse` = the live view (settings / last result).
+    @Published var sessions: [SessionInfo] = []
+    @Published var browse: Int? = nil
+
+    func refreshSessions() {
+        let root = URL(fileURLWithPath: options.outputDir).appendingPathComponent("sessions")
+        let dirs = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)) ?? []
+        var out: [SessionInfo] = []
+        for d in dirs.sorted(by: { $0.lastPathComponent > $1.lastPathComponent }) {
+            let flow = d.appendingPathComponent("flow.md")
+            guard FileManager.default.fileExists(atPath: flow.path) else { continue }
+            var info = SessionInfo(dir: d, name: d.lastPathComponent, flow: flow)
+            if let text = try? String(contentsOf: flow, encoding: .utf8) {
+                let head = text.prefix(1200)
+                if let m = head.range(of: #"~(\d+) tokens"#, options: .regularExpression) {
+                    info.tokens = Int(head[m].dropFirst().split(separator: " ").first ?? "")
+                }
+                if let m = head.range(of: #"- (\d+) steps"#, options: .regularExpression) {
+                    info.steps = Int(head[m].dropFirst(2).split(separator: " ").first ?? "")
+                }
+                if let m = head.range(of: #"duration (\d\d:\d\d\.\d)"#, options: .regularExpression) {
+                    info.duration = String(head[m].dropFirst(9))
+                }
+            }
+            out.append(info)
+        }
+        sessions = out
+        if let b = browse, b >= out.count { browse = out.isEmpty ? nil : out.count - 1 }
+    }
+
+    func browseOlder() {
+        guard !sessions.isEmpty else { return }
+        let next = (browse ?? -1) + 1
+        if next < sessions.count { browse = next }
+    }
+    func browseNewer() {
+        guard let b = browse else { return }
+        browse = b == 0 ? nil : b - 1
+    }
+    var browsing: SessionInfo? { browse.flatMap { $0 < sessions.count ? sessions[$0] : nil } }
+
     private var recorder: Recorder?
     private var timer: Timer?
     private var startedAt: Date?
@@ -46,6 +96,7 @@ final class AppController: ObservableObject {
 
     func start() {
         guard canRecord else { return }
+        browse = nil
         let dir = options.newSessionDir()
         let rec = Recorder(outDir: dir, options: options)
         rec.ignoreBundleId = Bundle.main.bundleIdentifier
@@ -88,6 +139,7 @@ final class AppController: ObservableObject {
                 let builder = try Builder(dir: rec.outDir, options: options)
                 let md = try builder.build()
                 setState(.done(md.path, builder.stats.tokens))
+                refreshSessions()
             } catch {
                 setState(.failed("build failed: \(error.localizedDescription)"))
             }
@@ -118,9 +170,21 @@ struct PopoverView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
+            HStack(spacing: 10) {
                 Text("AGENT SNAP").font(.system(.headline, design: .monospaced))
                 Spacer()
+                HStack(spacing: 2) {
+                    Button { c.browseOlder() } label: { Image(systemName: "chevron.left") }
+                        .buttonStyle(.plain)
+                        .disabled(c.sessions.isEmpty || (c.browse ?? -1) >= c.sessions.count - 1)
+                    Text(c.browse.map { "\($0 + 1)/\(c.sessions.count)" } ?? "now")
+                        .font(.system(.caption, design: .monospaced)).foregroundStyle(.secondary)
+                        .frame(minWidth: 34)
+                    Button { c.browseNewer() } label: { Image(systemName: "chevron.right") }
+                        .buttonStyle(.plain)
+                        .disabled(c.browse == nil)
+                }
+                .help("Browse past recordings")
                 Button { showSettings.toggle() } label: { Image(systemName: "gearshape") }.buttonStyle(.plain)
                 Button { NSApp.terminate(nil) } label: { Image(systemName: "power") }.buttonStyle(.plain)
             }
@@ -135,11 +199,14 @@ struct PopoverView: View {
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.yellow.opacity(0.12)))
             }
 
-            if showSettings || c.state == .idle {
-                settings
+            if let past = c.browsing {
+                pastSession(past)
+            } else {
+                if showSettings || c.state == .idle {
+                    settings
+                }
+                status
             }
-
-            status
 
             Button(action: { c.state == .recording ? c.stop() : c.start() }) {
                 HStack {
@@ -154,7 +221,28 @@ struct PopoverView: View {
         }
         .padding(16)
         .frame(width: 360)
-        .onAppear { c.refreshPermissions() }
+        .onAppear { c.refreshPermissions(); c.refreshSessions() }
+    }
+
+    private func pastSession(_ p: AppController.SessionInfo) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary)
+                Text(p.name).font(.system(.body, design: .monospaced))
+            }
+            HStack(spacing: 6) {
+                if let d = p.duration { Text(d) }
+                if let st = p.steps { Text("· \(st) steps") }
+                if let t = p.tokens { Text("· ~\(t >= 1000 ? String(format: "%.1fk", Double(t) / 1000) : "\(t)") tokens") }
+            }
+            .font(.caption).foregroundStyle(.secondary)
+            Text((p.flow.path as NSString).abbreviatingWithTildeInPath).font(.caption).lineLimit(1).truncationMode(.middle)
+            HStack {
+                Button("Copy prompt") { copy(AppController.prompt(for: p.flow.path)) }
+                Button("Open") { NSWorkspace.shared.open(p.flow) }
+                Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([p.flow]) }
+            }.controlSize(.small)
+        }
     }
 
     private func permissionRow(_ name: String, ok: Bool, fix: @escaping () -> Void) -> some View {
