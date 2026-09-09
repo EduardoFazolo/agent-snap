@@ -1,0 +1,18 @@
+# build
+.build/
+.swiftpm/
+dist/
+*.xcodeproj
+xcuserdata/
+
+# recordings and local test data
+sessions/
+*.mov
+*.mp4
+
+# local tooling / secrets
+.claude/
+.DS_Store
+*.p12
+*.key
+*.crt
