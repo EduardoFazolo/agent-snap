@@ -1,148 +1,148 @@
 # agent-snap
 
-Token-efficient screen recording for coding agents. macOS and Windows.
+Show a coding agent what you just did on screen, without burning your whole context on screenshots.
 
-`agent-snap` records a normal screen video (the source of truth) plus a timestamped
-log of everything that happened: every frame's arrival and changed area, every
-click, keystroke burst, scroll, drag, cursor movement, and window switch, with
-app/window/URL and, when the app answers quickly, the accessibility name of the
-element. The builder then reads frames straight out of the video, finds when the
-screen settled after each input, crops to where the change happened, and writes
-`flow.md`: one focused composite per window visit, with labels and arrows. Clicks
-without a usable accessibility name are labeled by reading the text under the
-cursor from the pixels (OCR), so any app works.
+Your agent can't see your screen. So you end up describing the bug in words, or pasting
+screenshots. Words miss things. Screenshots are heavy and go blurry once they get downscaled,
+and you need a bunch of them to tell a story.
 
-Three full screenshots ≈ 4.8k tokens and unreadable after downscale. One composite
-≈ 1.4k tokens and readable.
+agent-snap records what you do as a normal screen video, plus a log of every click, keystroke,
+scroll and window switch. Then it turns that into `flow.md`: a short flowchart of what happened,
+with cropped before/after images, labels and arrows. You paste that one file into any agent.
 
-## Tray app
+The video is the source of truth. Everything in `flow.md` is built from it, so nothing gets
+made up. Works on any app, native or web, because it reads the screen, not the DOM.
 
-```sh
-cargo build --release
-scripts/make-app.sh && open dist/AgentSnap.app     # macOS
-```
+Rough cost: three full screenshots are about 4.8k tokens and unreadable after downscale. One
+agent-snap composite is about 1.4k tokens and you can actually read it.
 
-Viewfinder icon in the menu bar (macOS) or notification area (Windows). Clicking it
-opens a popover with permission status and Grant buttons, settings (output folder,
-typed text, browser URLs, no-input updates, panels per image, panel width, settle
-time), arrows to browse past recordings, and a REC/STOP button. The icon turns into
-a red dot while recording, and interactions with the popover itself are not
-recorded. When you stop, it builds `flow.md` and offers Copy prompt / Open / Reveal.
-
-"Copy prompt" puts a one-line instruction plus the absolute path on your clipboard.
-Paste that into any agent. Images cannot travel through the clipboard, so the agent
-reads the file and follows the image links itself.
+macOS today. Windows backend is written but not tested on real hardware yet.
 
 ## Example
 
-A 24-second recording of someone filling in an expense form and switching tabs, on a
-small demo page (`smoke/index.html`). agent-snap turned it into `flow.md` at about
-**5,200 tokens**: four composites plus eleven step lines. That is the whole prompt you
-paste into an agent.
+I filled in an expense form and switched a couple of tabs on a small demo page. 24 seconds.
+agent-snap turned it into a `flow.md` of about **5,200 tokens**: four images and eleven step
+lines. That whole thing is the prompt you paste into an agent.
 
 ![recording](docs/example/recording.gif)
 
-*(the compressed clip that ships in the repo; [full-resolution mp4](docs/example/recording.mp4))*
+*(compressed clip that ships in the repo. Full-res: [recording.mp4](docs/example/recording.mp4))*
 
-What the agent actually
-reads is [`docs/example/flow.md`](docs/example/flow.md) and its four composites:
+Here is what the agent actually reads, [`docs/example/flow.md`](docs/example/flow.md) plus these
+four images:
 
 ![step 1](docs/example/composites/run-01-a.png)
 ![step 2](docs/example/composites/run-01-b.png)
 ![step 3](docs/example/composites/run-01-c.png)
 ![step 4](docs/example/composites/run-01-d.png)
 
-Every click and keystroke is labelled and pointed at with an arrow. Where the app gave no
-usable accessibility name, the label is read from the pixels under the cursor (marked "text
-read from screen"), so it works the same on a native app or a web page. The category
-dropdown opening and the value landing on Travel, the billable checkbox being ticked, and
-the two tab switches all survive into the flow.
+Every click and keystroke gets a label and an arrow pointing at it. When the app doesn't hand
+over a name for what you clicked, agent-snap reads the text off the pixels instead (you'll see
+"text read from screen"). So it names the Category dropdown opening, the value landing on
+Travel, the Billable checkbox getting ticked, and both tab switches, same as it would in a
+native app.
 
-The test is reproducible: `smoke/run.sh` serves the page, opens a throwaway Chrome window,
-records with agent-snap, and drives the form with real mouse and keyboard events (a small
-signed helper in `smoke/`, since screen-recording input taps only see real OS events). The
-`smoke/` folder is gitignored; only the finished example under `docs/example/` is committed.
+The whole example is reproducible. `smoke/run.sh` serves the page, opens a throwaway Chrome,
+records with agent-snap, and drives the form with real mouse and keyboard. `smoke/` is
+gitignored, only the finished result in `docs/example/` is committed.
 
-## CLI
+## Use it
+
+Menu bar app:
 
 ```sh
 cargo build --release
-target/release/agent-snap record                      # Ctrl+C to stop
-target/release/agent-snap record --duration 30 --out sessions/demo
-target/release/agent-snap build sessions/demo         # rebuild flow.md
+scripts/make-app.sh && open dist/AgentSnap.app
 ```
 
-Output directory:
+You get a viewfinder icon in the menu bar. Click it for a small popover: permissions, a few
+settings, arrows to look back at old recordings, and a REC button. Icon goes red while
+recording. It ignores clicks on its own popover, so that never ends up in your recording.
+
+Hit STOP and it builds `flow.md`, then gives you Copy prompt, Open and Reveal.
+
+Copy prompt puts one line plus the file path on your clipboard. Paste it into any agent. It
+copies the path, not the images, because images can't ride the clipboard. The agent opens the
+file and follows the image links itself.
+
+Or from the terminal:
+
+```sh
+cargo build --release
+target/release/agent-snap record                   # Ctrl+C to stop
+target/release/agent-snap record --duration 30 --out sessions/demo
+target/release/agent-snap build sessions/demo      # rebuild flow.md from a recording
+```
+
+Each recording is a folder:
 
 ```
 sessions/<stamp>/
-  recording.mp4       the video (HEVC when the GPU offers it, 30fps, cursor visible)
-  session.json        frame log, steps, window timeline, AX targets, pixel coords
-  frames/*.png        keyframes pulled from the video (before/after each step)
-  composites/*.png    focused panels with labels + arrows
-  flow.md             what to paste to the agent
+  recording.mp4       the video, 30fps, cursor visible
+  session.json        frame log, steps, window timeline, pixel coords
+  frames/*.png        before/after frames pulled from the video
+  composites/*.png    the cropped panels with labels and arrows
+  flow.md             the thing you paste to the agent
 ```
 
-`ffmpeg` is used for encoding and frame extraction. It is taken from `PATH` when
-present, otherwise downloaded once into the app data directory.
+It uses `ffmpeg` to encode and to pull frames back out. It'll use the one on your `PATH`, or
+grab its own once if you don't have it.
 
 ## Permissions
 
-**macOS.** Grant Screen Recording and Accessibility. The tray app attributes them to
-`AgentSnap.app`; the CLI attributes them to whatever terminal you ran it from.
-macOS ties Accessibility to the code signature, so an ad-hoc signed build loses the
-grant on every rebuild. `make-app.sh` signs with a self-signed "AgentSnap Dev"
-certificate when one exists in the login keychain, which keeps the grant stable. If
-permissions look granted but the app still says no, reset and re-grant:
+**macOS.** Grant Screen Recording and Accessibility. The menu bar app asks for them as
+`AgentSnap.app`. The CLI asks as whatever terminal you ran it from.
+
+One annoying macOS thing: it ties the Accessibility grant to the app's signature, so an ad-hoc
+build loses the grant every time you rebuild. `make-app.sh` signs with a self-signed
+"AgentSnap Dev" cert if you have one in your login keychain, which keeps the grant stable
+across rebuilds.
+
+If it looks granted but the app still says no, reset and grant again:
 
 ```sh
 tccutil reset Accessibility com.fazolo.agent-snap
 tccutil reset ScreenCapture com.fazolo.agent-snap
 ```
 
-Automation permission is asked for once, the first time a browser tab URL is read.
+First time it reads a browser tab URL, macOS asks for Automation once too.
 
-**Windows.** Nothing to grant. Screen capture, the input hooks and UI Automation all
-work without a permission prompt.
+**Windows.** Nothing to grant. Capture, input hooks and UI Automation all work without a
+prompt.
+
+## How it works
+
+- **Capture.** The OS only hands over a frame when pixels actually change, and tells you which
+  rectangles. agent-snap writes one frame every 1/30s anyway, repeating the last one when
+  nothing moved, so the file is a steady 30fps and your cursor is always in it.
+- **Input.** A listen-only tap on mouse and keyboard. It watches, it never swallows your input.
+- **Gestures.** Raw events get grouped into things like click, double click, drag, a typed run
+  of text, a key chord, a scroll. Repeated identical clicks are kept on purpose, not merged.
+  That's how an agent can tell a page stopped responding and you clicked five times.
+- **Window tracking.** Front app and window, browser tab URL, what you clicked, what's focused
+  when you type. Password fields are redacted. Nothing waits on the accessibility API, and there
+  are zero app-specific hacks.
+- **Builder.** Pulls frames from the video, works out when the screen settled after each action,
+  crops to where the change happened, and reads the click target off the pixels when the app
+  gave nothing. Panels that barely changed collapse to a single text line instead of a near-
+  identical image.
 
 ## Layout
 
 ```
-crates/core      OS-neutral: session model, gesture coalescing, recording
-                 orchestration, ffmpeg encode/decode, and the flow.md builder
+crates/core      OS-neutral: session model, gestures, recording, ffmpeg, the flow.md builder
 crates/macos     ScreenCaptureKit, CGEventTap, Accessibility, Vision OCR
 crates/windows   Windows.Graphics.Capture, low-level hooks, UI Automation, Windows OCR
-app              the binary: CLI + Tauri tray with the popover
+app              the binary: CLI plus the Tauri menu bar app
 ```
 
-Everything platform-specific sits behind five traits in `crates/core/src/platform.rs`:
-`ScreenCapture`, `InputTap`, `WindowTracker`, `Ocr`, `Permissions`. A new OS means
-implementing those and nothing else.
-
-## How it works
-
-- **Capture.** The OS delivers a frame when pixels change, with the changed
-  rectangles. The recorder writes one frame per 1/30s tick, repeating the last frame
-  when nothing changed, so the file is constant-fps and the cursor is always in it.
-- **Input.** A listen-only global tap records mouse and keyboard without swallowing
-  anything.
-- **Semantics.** Raw events coalesce into gestures: click, double/right click, drag,
-  typed text (1s gap), key chord, scroll, and sustained cursor movement with no
-  click. Repeated identical clicks are kept, not merged; they are how an agent can
-  tell a page stopped responding.
-- **Window tracking.** Frontmost app and window, browser tab URL, a hit-test on
-  click, the focused element on typing. Password fields are redacted. Nothing waits
-  on accessibility, and no app-specific tricks are used.
-- **Builder.** Reads frames out of the video, computes settle time from the frame log
-  (quiet gap, 2s max), synthesizes "Screen updated" steps from large repaints that
-  had no input, and OCRs the click target when accessibility gave nothing useful.
-  The focus rect is the changed cells near the click plus the target bounds, padded,
-  min 700×450, max 1800×1200, clamped to the window, and held stable across
-  consecutive steps. Panels that changed less than 2% become a text-only line.
+All the OS-specific stuff sits behind five traits in `crates/core/src/platform.rs`:
+`ScreenCapture`, `InputTap`, `WindowTracker`, `Ocr`, `Permissions`. A new OS means writing those
+and nothing else.
 
 ## Not yet
 
-- Windows backend is written and type-checks, but is untested on real hardware
-- Linux capture and input backends
-- multi-display (primary display only)
-- merging panels that show the same thing twice
+- Windows backend compiles but nobody has run it on a real Windows machine
+- Linux
+- more than one display (main display only for now)
+- merging panels that show basically the same thing twice
