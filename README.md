@@ -40,11 +40,11 @@ small demo page (`smoke/index.html`). agent-snap turned it into `flow.md` at abo
 **5,200 tokens**: four composites plus eleven step lines. That is the whole prompt you
 paste into an agent.
 
-<video src="https://raw.githubusercontent.com/EduardoFazolo/agent-snap/main/docs/example/recording.mp4" controls width="900"></video>
+![recording](docs/example/recording.gif)
 
-If the player does not load, [download the clip](docs/example/recording.mp4).
+*(the compressed clip that ships in the repo; [full-resolution mp4](docs/example/recording.mp4))*
 
-The recording above is the compressed clip that ships in the repo. What the agent actually
+What the agent actually
 reads is [`docs/example/flow.md`](docs/example/flow.md) and its four composites:
 
 ![step 1](docs/example/composites/run-01-a.png)
