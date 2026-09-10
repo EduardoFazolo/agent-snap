@@ -1,12 +1,18 @@
 #!/bin/sh
-# Builds release binary and wraps it in dist/AgentSnap.app (ad-hoc signed, menu bar only).
+# Wraps a binary in dist/AgentSnap.app (menu bar only) and signs it.
+# Usage: scripts/make-app.sh [path/to/binary]   (default: target/release/agent-snap)
+# Signs with "AgentSnap Dev" when that identity exists (so TCC permissions survive rebuilds), else ad-hoc.
 set -e
 cd "$(dirname "$0")/.."
-swift build -c release
+BIN="${1:-target/release/agent-snap}"
+if [ ! -x "$BIN" ]; then
+  echo "binary not found: $BIN (build first, e.g. cargo build --release)" >&2
+  exit 1
+fi
 APP=dist/AgentSnap.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/agent-snap "$APP/Contents/MacOS/AgentSnap"
+cp "$BIN" "$APP/Contents/MacOS/AgentSnap"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -16,13 +22,13 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleDisplayName</key><string>Agent Snap</string>
   <key>CFBundleExecutable</key><string>AgentSnap</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
+  <key>CFBundleShortVersionString</key><string>0.2.0</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppleEventsUsageDescription</key><string>Reads the active browser tab URL to label recordings.</string>
-  <key>NSScreenCaptureUsageDescription</key><string>Captures keyframes of your screen while recording.</string>
+  <key>NSScreenCaptureUsageDescription</key><string>Captures your screen while recording.</string>
 </dict></plist>
 PLIST
 # Prefer a stable identity so macOS permissions survive rebuilds (see README).

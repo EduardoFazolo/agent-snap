@@ -1,8 +1,8 @@
 # agent-snap
 
-Token-efficient screen recording for coding agents (macOS).
+Token-efficient screen recording for coding agents. macOS and Windows.
 
-`agent-snap` records a normal screen video (source of truth) plus a timestamped
+`agent-snap` records a normal screen video (the source of truth) plus a timestamped
 log of everything that happened: every frame's arrival and changed area, every
 click, keystroke burst, scroll, drag, cursor movement, and window switch, with
 app/window/URL and, when the app answers quickly, the accessibility name of the
@@ -10,91 +10,109 @@ element. The builder then reads frames straight out of the video, finds when the
 screen settled after each input, crops to where the change happened, and writes
 `flow.md`: one focused composite per window visit, with labels and arrows. Clicks
 without a usable accessibility name are labeled by reading the text under the
-cursor from the pixels (Vision OCR), so any app works.
+cursor from the pixels (OCR), so any app works.
 
 Three full screenshots ≈ 4.8k tokens and unreadable after downscale. One composite
 ≈ 1.4k tokens and readable.
 
-## Menu bar app
+## Tray app
 
 ```sh
-./scripts/make-app.sh && open dist/AgentSnap.app
+cargo build --release
+scripts/make-app.sh && open dist/AgentSnap.app     # macOS
 ```
 
-Viewfinder icon in the menu bar. Popover has permission status with Grant buttons,
-settings (output folder, typed text, browser URLs, no-input updates, panels per
-image, panel width, settle time) and a REC/STOP button. Icon turns red while
-recording; interactions with the popover itself are not recorded. When you stop,
-it builds `flow.md` and offers Copy path / Open / Reveal.
+Viewfinder icon in the menu bar (macOS) or notification area (Windows). Clicking it
+opens a popover with permission status and Grant buttons, settings (output folder,
+typed text, browser URLs, no-input updates, panels per image, panel width, settle
+time), arrows to browse past recordings, and a REC/STOP button. The icon turns into
+a red dot while recording, and interactions with the popover itself are not
+recorded. When you stop, it builds `flow.md` and offers Copy prompt / Open / Reveal.
 
-Permissions are attributed to `AgentSnap.app`, so grant Screen Recording and
-Accessibility to it once. macOS ties Accessibility to the code signature, so an ad-hoc signed build loses
-the grant on every rebuild. `make-app.sh` signs with a self-signed "AgentSnap Dev"
-certificate when one exists in the login keychain, which keeps the grant stable.
-If permissions look granted but the app still says no, reset and re-grant:
-
-```sh
-tccutil reset Accessibility com.fazolo.agent-snap
-tccutil reset ScreenCapture com.fazolo.agent-snap
-```
+"Copy prompt" puts a one-line instruction plus the absolute path on your clipboard.
+Paste that into any agent. Images cannot travel through the clipboard, so the agent
+reads the file and follows the image links itself.
 
 ## CLI
 
 ```sh
-swift build -c release
-.build/release/agent-snap record            # Ctrl+C to stop
-.build/release/agent-snap record --duration 30 --out sessions/demo
-.build/release/agent-snap build sessions/demo   # rebuild flow.md from frames
+cargo build --release
+target/release/agent-snap record                      # Ctrl+C to stop
+target/release/agent-snap record --duration 30 --out sessions/demo
+target/release/agent-snap build sessions/demo         # rebuild flow.md
 ```
 
 Output directory:
 
 ```
 sessions/<stamp>/
-  recording.mov       the video (HEVC, 30fps, cursor visible, 10s fragments)
+  recording.mp4       the video (HEVC when the GPU offers it, 30fps, cursor visible)
   session.json        frame log, steps, window timeline, AX targets, pixel coords
-  ax.log              accessibility diagnostics per click
-  frames/*.png        keyframes extracted from the video (before/after each step)
+  frames/*.png        keyframes pulled from the video (before/after each step)
   composites/*.png    focused panels with labels + arrows
   flow.md             what to paste to the agent
 ```
 
-## CLI permissions
+`ffmpeg` is used for encoding and frame extraction. It is taken from `PATH` when
+present, otherwise downloaded once into the app data directory.
 
-Run it from a real terminal app (Terminal, iTerm, Ghostty...). macOS attributes
-permissions to that app. Grant in System Settings > Privacy & Security:
+## Permissions
 
-- **Screen Recording** → your terminal (ScreenCaptureKit)
-- **Accessibility** → your terminal (global input tap + element names)
-- **Automation** → prompt appears on first browser URL read (osascript)
+**macOS.** Grant Screen Recording and Accessibility. The tray app attributes them to
+`AgentSnap.app`; the CLI attributes them to whatever terminal you ran it from.
+macOS ties Accessibility to the code signature, so an ad-hoc signed build loses the
+grant on every rebuild. `make-app.sh` signs with a self-signed "AgentSnap Dev"
+certificate when one exists in the login keychain, which keeps the grant stable. If
+permissions look granted but the app still says no, reset and re-grant:
+
+```sh
+tccutil reset Accessibility com.fazolo.agent-snap
+tccutil reset ScreenCapture com.fazolo.agent-snap
+```
+
+Automation permission is asked for once, the first time a browser tab URL is read.
+
+**Windows.** Nothing to grant. Screen capture, the input hooks and UI Automation all
+work without a permission prompt.
+
+## Layout
+
+```
+crates/core      OS-neutral: session model, gesture coalescing, recording
+                 orchestration, ffmpeg encode/decode, and the flow.md builder
+crates/macos     ScreenCaptureKit, CGEventTap, Accessibility, Vision OCR
+crates/windows   Windows.Graphics.Capture, low-level hooks, UI Automation, Windows OCR
+app              the binary: CLI + Tauri tray with the popover
+```
+
+Everything platform-specific sits behind five traits in `crates/core/src/platform.rs`:
+`ScreenCapture`, `InputTap`, `WindowTracker`, `Ocr`, `Permissions`. A new OS means
+implementing those and nothing else.
 
 ## How it works
 
-- `Capture.swift` ScreenCaptureKit stream, cursor visible. The OS delivers a frame
-  when pixels change (with dirty rects); the recorder re-appends the last frame to
-  keep a constant 30fps file.
-- `InputTap.swift` CGEventTap for mouse/keyboard (listen-only).
-- `Semantics.swift` coalesces raw events into gestures: click, double/right click,
-  drag, typed text (1s gap), key chord, scroll.
-- `WindowTracker.swift` frontmost app/window via AX, browser tab URL via
-  AppleScript, AX hit-test on click, focused element on typing. Password fields
-  are redacted.
-- `Recorder.swift` writes every frame to `recording.mov` (`VideoWriter`) and logs
-  its time + dirty rect. Gestures and window switches are logged with timestamps.
-  Nothing waits on accessibility.
-- `Builder.swift` reads frames out of the video (`FrameSource`), computes settle
-  from the frame log (quiet gap, 2s max), synthesizes "Screen updated" steps from
-  large repaints with no input, OCRs click targets when AX gave nothing useful.
-- `AppUI.swift` NSStatusItem + NSPopover + SwiftUI, `Options.swift` settings in UserDefaults.
-- `Builder.swift` focus rect = changed cells near the click ∪ target bounds,
-  padded, min 700×450, max 1800×1200, clamped to the window. Rolling window keeps
-  the rect stable across consecutive steps. Panels are never scaled below
-  native pixels until they exceed 1000×780. Window visits under 1.5s with no
-  input collapse to one line.
+- **Capture.** The OS delivers a frame when pixels change, with the changed
+  rectangles. The recorder writes one frame per 1/30s tick, repeating the last frame
+  when nothing changed, so the file is constant-fps and the cursor is always in it.
+- **Input.** A listen-only global tap records mouse and keyboard without swallowing
+  anything.
+- **Semantics.** Raw events coalesce into gestures: click, double/right click, drag,
+  typed text (1s gap), key chord, scroll, and sustained cursor movement with no
+  click. Repeated identical clicks are kept, not merged; they are how an agent can
+  tell a page stopped responding.
+- **Window tracking.** Frontmost app and window, browser tab URL, a hit-test on
+  click, the focused element on typing. Password fields are redacted. Nothing waits
+  on accessibility, and no app-specific tricks are used.
+- **Builder.** Reads frames out of the video, computes settle time from the frame log
+  (quiet gap, 2s max), synthesizes "Screen updated" steps from large repaints that
+  had no input, and OCRs the click target when accessibility gave nothing useful.
+  The focus rect is the changed cells near the click plus the target bounds, padded,
+  min 700×450, max 1800×1200, clamped to the window, and held stable across
+  consecutive steps. Panels that changed less than 2% become a text-only line.
 
 ## Not yet
 
-- Windows / Linux capture and input backends
-- multi-display (main display only)
-- hover detection, screen-update noise tuning
-- mapping element names to source files (grep on AX name)
+- Windows backend is written and type-checks, but is untested on real hardware
+- Linux capture and input backends
+- multi-display (primary display only)
+- merging panels that show the same thing twice

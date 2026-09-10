@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AgentSnap",
+  "version": "0.2.0",
+  "identifier": "com.fazolo.agent-snap",
+  "build": {
+    "frontendDist": "ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "macOSPrivateApi": true,
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    },
+    "windows": [
+      {
+        "label": "popover",
+        "url": "index.html",
+        "title": "agent-snap",
+        "width": 320,
+        "height": 520,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "visible": false,
+        "focus": false
+      }
+    ]
+  },
+  "bundle": {
+    "active": false,
+    "targets": ["app"],
+    "category": "DeveloperTool",
+    "shortDescription": "Token-efficient screen recording for coding agents"
+  }
+}

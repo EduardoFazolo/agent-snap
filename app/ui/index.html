@@ -1,0 +1,435 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>agent-snap</title>
+<style>
+  :root {
+    --bg: rgba(246,246,247,0.96);
+    --card-border: rgba(0,0,0,0.12);
+    --fg: #1c1c1e;
+    --dim: #6c6c70;
+    --line: rgba(0,0,0,0.08);
+    --field: rgba(0,0,0,0.05);
+    --accent: #007aff;
+    --rec: #ff3b30;
+    --ok: #30a14e;
+    --warn: #d97706;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: rgba(38,38,40,0.97);
+      --card-border: rgba(255,255,255,0.12);
+      --fg: #f2f2f7;
+      --dim: #9a9aa0;
+      --line: rgba(255,255,255,0.10);
+      --field: rgba(255,255,255,0.08);
+      --ok: #4ade80;
+      --warn: #fbbf24;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: transparent;
+    font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--fg); user-select: none; cursor: default; overflow: hidden;
+  }
+  #wrap { padding: 10px; }
+  #card {
+    position: relative; background: var(--bg); border: 0.5px solid var(--card-border);
+    border-radius: 11px; box-shadow: 0 6px 22px rgba(0,0,0,0.22); padding: 10px 12px 12px;
+  }
+  /* fake popover arrow */
+  #card::before, #card::after {
+    content: ""; position: absolute; left: 50%; transform: translateX(-50%);
+    border-left: 8px solid transparent; border-right: 8px solid transparent;
+  }
+  body.up #card::before { top: -8px; border-bottom: 8px solid var(--card-border); }
+  body.up #card::after  { top: -7px; border-bottom: 8px solid var(--bg); }
+  body.down #card::before { bottom: -8px; border-top: 8px solid var(--card-border); }
+  body.down #card::after  { bottom: -7px; border-top: 8px solid var(--bg); }
+
+  header { display: flex; align-items: center; gap: 6px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+  h1 { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); margin: 0; flex: 1; }
+  .icons { display: flex; align-items: center; gap: 2px; }
+  button.icon {
+    background: none; border: 0; color: var(--dim); font-size: 13px; line-height: 1;
+    padding: 4px 5px; border-radius: 5px; cursor: default;
+  }
+  button.icon:hover:not(:disabled) { background: var(--field); color: var(--fg); }
+  button.icon:disabled { opacity: 0.3; }
+  button.icon.on { color: var(--accent); }
+  #browseLabel { font-size: 11px; color: var(--dim); min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; }
+
+  section { padding: 9px 0; border-bottom: 1px solid var(--line); }
+  section:last-of-type { border-bottom: 0; }
+  .row { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+  .row + .row { margin-top: 5px; }
+  .row .label { flex: 1; color: var(--dim); }
+  .row .val { color: var(--fg); font-variant-numeric: tabular-nums; }
+  .path { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+
+  /* switch */
+  .sw { width: 34px; height: 20px; border-radius: 10px; background: var(--field); position: relative; transition: background 0.12s; flex: none; }
+  .sw.on { background: var(--accent); }
+  .sw i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 8px; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.3); transition: left 0.12s; }
+  .sw.on i { left: 16px; }
+
+  /* segmented */
+  .seg { display: flex; background: var(--field); border-radius: 6px; padding: 2px; gap: 2px; }
+  .seg button { flex: 1; border: 0; background: none; color: var(--dim); font-size: 11px; padding: 3px 7px; border-radius: 4px; cursor: default; font-variant-numeric: tabular-nums; }
+  .seg button.on { background: var(--bg); color: var(--fg); box-shadow: 0 1px 2px rgba(0,0,0,0.14); }
+
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 16px; }
+
+  .card {
+    background: var(--field); border-radius: 8px; padding: 9px 10px; margin-top: 2px;
+  }
+  .card .title { font-weight: 600; display: flex; align-items: center; gap: 5px; }
+  .card .sub { color: var(--dim); font-size: 11px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .actions { display: flex; gap: 5px; margin-top: 8px; }
+  .actions button {
+    flex: 1; border: 0.5px solid var(--card-border); background: var(--bg); color: var(--fg);
+    font-size: 11px; padding: 4px 0; border-radius: 5px; cursor: default;
+  }
+  .actions button:hover { background: var(--field); }
+  .actions button.done { color: var(--ok); border-color: var(--ok); }
+
+  .dot { width: 7px; height: 7px; border-radius: 4px; background: var(--rec); flex: none; }
+  .dot.pulse { animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: 0.25 } }
+
+  #big {
+    width: 100%; margin-top: 10px; border: 0; border-radius: 8px; padding: 9px 0;
+    font-size: 13px; font-weight: 600; letter-spacing: 0.05em; color: #fff; background: var(--rec); cursor: default;
+  }
+  #big.stop { background: #3a3a3c; }
+  #big:disabled { opacity: 0.45; }
+
+  .perm { display: flex; align-items: center; gap: 7px; }
+  .perm + .perm { margin-top: 5px; }
+  .perm .name { flex: 1; }
+  .perm .state { font-size: 11px; }
+  .perm .state.ok { color: var(--ok); }
+  .perm .state.no { color: var(--warn); }
+  .perm button { border: 0.5px solid var(--card-border); background: var(--bg); color: var(--accent); font-size: 11px; padding: 3px 8px; border-radius: 5px; cursor: default; }
+  .hint { font-size: 11px; color: var(--dim); margin-top: 6px; }
+  .err { color: var(--warn); font-size: 11px; word-break: break-word; }
+  .hidden { display: none !important; }
+  .last { font-size: 11px; color: var(--dim); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>
+</head>
+<body class="up">
+<div id="wrap"><div id="card">
+  <header>
+    <h1>agent-snap</h1>
+    <div class="icons">
+      <button class="icon" id="prev" title="Older recording">&lsaquo;</button>
+      <span id="browseLabel">now</span>
+      <button class="icon" id="next" title="Newer recording">&rsaquo;</button>
+      <button class="icon" id="gear" title="Settings">&#9881;</button>
+      <button class="icon" id="power" title="Quit">&#9211;</button>
+    </div>
+  </header>
+
+  <section id="perms" class="hidden">
+    <div class="perm">
+      <span class="name">Screen Recording</span>
+      <span class="state" id="permScreenState"></span>
+      <button data-perm="screen">Grant…</button>
+    </div>
+    <div class="perm">
+      <span class="name">Accessibility</span>
+      <span class="state" id="permAxState"></span>
+      <button data-perm="ax">Grant…</button>
+    </div>
+    <div class="hint">Grant both, then reopen this popover.</div>
+  </section>
+
+  <section id="settings" class="hidden">
+    <div class="row">
+      <span class="label">Output</span>
+      <span class="path val" id="outDir"></span>
+    </div>
+    <div class="row">
+      <span class="label">Typed text</span>
+      <div class="sw" id="swTyped"><i></i></div>
+    </div>
+    <div class="row">
+      <span class="label">Browser URLs</span>
+      <div class="sw" id="swUrls"><i></i></div>
+    </div>
+    <div class="row">
+      <span class="label">No-input updates</span>
+      <div class="sw" id="swUpdates"><i></i></div>
+    </div>
+    <div class="row">
+      <span class="label">Panels / image</span>
+      <div class="seg" id="segPanels" style="flex:0 0 110px"></div>
+    </div>
+    <div class="row">
+      <span class="label">Max width</span>
+      <div class="seg" id="segWidth" style="flex:0 0 140px"></div>
+    </div>
+    <div class="row">
+      <span class="label">Settle quiet</span>
+      <input type="range" id="quiet" min="100" max="1200" step="50">
+      <span class="val" id="quietVal" style="width:46px;text-align:right"></span>
+    </div>
+  </section>
+
+  <section id="status"></section>
+
+  <button id="big">REC</button>
+</div></div>
+
+<script>
+const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
+
+let snap = null;         // live state from Rust
+let perms = { screen: true, ax: true };
+let browse = 0;          // 0 = now, 1..N = sessions[browse-1]
+let showSettings = false;
+let lastH = 0;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const shortTokens = (t) => (t >= 1000 ? (t / 1000).toFixed(1) + "k" : String(t));
+
+function sessionCount() { return snap && snap.sessions ? snap.sessions.length : 0; }
+function browsed() { return browse > 0 ? snap.sessions[browse - 1] : null; }
+function busy() { return snap && (snap.phase === "starting" || snap.phase === "recording" || snap.phase === "building"); }
+
+// ---- rendering ----
+
+function renderHeader() {
+  const n = sessionCount();
+  $("browseLabel").textContent = browse === 0 ? "now" : `${browse}/${n}`;
+  $("prev").disabled = browse >= n;
+  $("next").disabled = browse === 0;
+  $("gear").classList.toggle("on", showSettings);
+  $("gear").disabled = browse !== 0;
+}
+
+function renderPerms() {
+  const missing = !perms.screen || !perms.ax;
+  $("perms").classList.toggle("hidden", !missing);
+  $("permScreenState").textContent = perms.screen ? "granted" : "not granted";
+  $("permScreenState").className = "state " + (perms.screen ? "ok" : "no");
+  $("permAxState").textContent = perms.ax ? "granted" : "not granted";
+  $("permAxState").className = "state " + (perms.ax ? "ok" : "no");
+  document.querySelectorAll("#perms button").forEach((b) => {
+    const ok = b.dataset.perm === "screen" ? perms.screen : perms.ax;
+    b.textContent = ok ? "Open…" : "Grant…";
+  });
+}
+
+function seg(el, values, current, fmt, onPick) {
+  el.innerHTML = "";
+  for (const v of values) {
+    const b = document.createElement("button");
+    b.textContent = fmt(v);
+    if (v === current) b.classList.add("on");
+    b.onclick = () => onPick(v);
+    el.appendChild(b);
+  }
+}
+
+function renderSettings() {
+  const show = showSettings && browse === 0;
+  $("settings").classList.toggle("hidden", !show);
+  if (!show || !snap) return;
+  const o = snap.options;
+  $("outDir").textContent = snap.outputDirShort;
+  $("outDir").title = snap.options.outputDir;
+  $("swTyped").classList.toggle("on", o.captureTypedText);
+  $("swUrls").classList.toggle("on", o.captureURLs);
+  $("swUpdates").classList.toggle("on", o.detectScreenUpdates);
+  seg($("segPanels"), [2, 3, 4], o.panelsPerImage, String, (v) => patch({ panelsPerImage: v }));
+  seg($("segWidth"), [1200, 1568, 2000], o.compositeWidth, String, (v) => patch({ compositeWidth: v }));
+  $("quiet").value = o.quietMs;
+  $("quietVal").textContent = o.quietMs + "ms";
+}
+
+function doneCard(path, pathShort, steps, tokens, duration, title) {
+  const bits = [];
+  if (steps != null) bits.push(steps + " steps");
+  if (tokens != null) bits.push("~" + shortTokens(tokens) + " tokens");
+  if (duration) bits.push(duration);
+  return `<div class="card">
+      <div class="title">${esc(title)}</div>
+      <div class="sub">${esc(bits.join(" · "))}</div>
+      <div class="path" style="margin-top:4px" title="${esc(path)}">${esc(pathShort || path)}</div>
+      <div class="actions">
+        <button class="done" data-act="copy" data-path="${esc(path)}">Copy prompt</button>
+        <button data-act="open" data-path="${esc(path)}">Open</button>
+        <button data-act="reveal" data-path="${esc(path)}">Reveal</button>
+      </div>
+    </div>`;
+}
+
+function renderStatus() {
+  const el = $("status");
+  if (!snap) { el.innerHTML = ""; return; }
+
+  if (browse > 0) {
+    const s = browsed();
+    el.innerHTML = s
+      ? `<div class="sub" style="color:var(--dim);font-size:11px;margin-bottom:6px">${esc(s.name)}</div>` +
+        doneCard(s.flow, s.flowShort, s.steps, s.tokens, s.duration, "flow.md")
+      : "";
+    return;
+  }
+
+  switch (snap.phase) {
+    case "starting":
+      el.innerHTML = `<div class="row"><span class="dot pulse"></span><span class="label">Starting capture…</span></div>`;
+      break;
+    case "recording":
+      el.innerHTML =
+        `<div class="row"><span class="dot pulse"></span><span class="label">Recording</span>` +
+        `<span class="val">${esc(snap.elapsed)}</span></div>` +
+        `<div class="last">${snap.stepCount} steps${snap.lastStep ? " · " + esc(snap.lastStep) : ""}</div>`;
+      break;
+    case "building":
+      el.innerHTML = `<div class="row"><span class="label">Building flow.md…</span></div>`;
+      break;
+    case "done": {
+      const s = (snap.sessions || [])[0];
+      const steps = s && s.steps != null ? s.steps : snap.stepCount;
+      const dur = s ? s.duration : null;
+      el.innerHTML = doneCard(snap.path, snap.pathShort, steps, snap.tokens, dur, "flow.md ready");
+      break;
+    }
+    case "failed":
+      el.innerHTML = `<div class="err">${esc(snap.message || "failed")}</div>`;
+      break;
+    default: {
+      const s = (snap.sessions || [])[0];
+      el.innerHTML = s
+        ? `<div class="row"><span class="label">Last recording</span><span class="val" style="font-size:11px">${esc(s.name)}</span></div>` +
+          doneCard(s.flow, s.flowShort, s.steps, s.tokens, s.duration, "flow.md")
+        : `<div class="row"><span class="label">Ready. Hit REC, do the thing, hit STOP.</span></div>`;
+    }
+  }
+}
+
+function renderBig() {
+  const b = $("big");
+  const recording = snap && (snap.phase === "recording" || snap.phase === "starting");
+  const building = snap && snap.phase === "building";
+  b.textContent = recording ? "STOP" : building ? "BUILDING…" : "REC";
+  b.classList.toggle("stop", !!recording);
+  b.disabled = !!building || browse !== 0 || (!recording && (!perms.screen || !perms.ax));
+}
+
+function render() {
+  document.body.classList.toggle("up", !snap || snap.platform !== "windows");
+  document.body.classList.toggle("down", !!snap && snap.platform === "windows");
+  renderHeader();
+  renderPerms();
+  renderSettings();
+  renderStatus();
+  renderBig();
+  fit();
+}
+
+function fit(show) {
+  const h = Math.ceil($("card").getBoundingClientRect().height) + 20;
+  if (show || h !== lastH) {
+    lastH = h;
+    invoke("resize", { width: 320, height: h, show: !!show });
+  }
+}
+
+// ---- actions ----
+
+async function patch(delta) {
+  const o = Object.assign({}, snap.options, delta);
+  snap = await invoke("set_options", { options: o });
+  render();
+}
+
+document.addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.act) {
+    const path = b.dataset.path;
+    if (b.dataset.act === "copy") {
+      await invoke("copy_prompt", { path });
+      const old = b.textContent;
+      b.textContent = "Copied ✓";
+      setTimeout(() => (b.textContent = old), 1200);
+    } else if (b.dataset.act === "open") {
+      await invoke("open_path", { path });
+    } else {
+      await invoke("reveal_path", { path });
+    }
+    return;
+  }
+  if (b.dataset.perm) {
+    await invoke("permissions_request", { which: b.dataset.perm });
+    return;
+  }
+});
+
+$("prev").onclick = () => { if (browse < sessionCount()) { browse++; render(); } };
+$("next").onclick = () => { if (browse > 0) { browse--; render(); } };
+$("gear").onclick = () => { showSettings = !showSettings; render(); };
+$("power").onclick = () => invoke("quit");
+$("swTyped").onclick = () => patch({ captureTypedText: !snap.options.captureTypedText });
+$("swUrls").onclick = () => patch({ captureURLs: !snap.options.captureURLs });
+$("swUpdates").onclick = () => patch({ detectScreenUpdates: !snap.options.detectScreenUpdates });
+$("quiet").oninput = (e) => { $("quietVal").textContent = e.target.value + "ms"; };
+$("quiet").onchange = (e) => patch({ quietMs: Number(e.target.value) });
+
+$("big").onclick = async () => {
+  if (!snap) return;
+  if (snap.phase === "recording" || snap.phase === "starting") {
+    await invoke("stop_recording");
+  } else {
+    try {
+      await invoke("start_recording");
+    } catch (err) {
+      await refreshPerms();
+      render();
+    }
+  }
+};
+
+async function refreshPerms() {
+  try { perms = await invoke("permissions_state"); } catch (e) { /* keep last */ }
+}
+
+// ---- wiring ----
+
+listen("state", (e) => {
+  snap = e.payload;
+  if (snap.phase === "done") browse = 0;
+  render();
+});
+
+listen("popover:show", async () => {
+  snap = await invoke("get_state");
+  await refreshPerms();
+  if (snap.phase === "done") browse = 0;
+  render();
+  fit(true);
+});
+
+(async () => {
+  snap = await invoke("get_state");
+  await refreshPerms();
+  render();
+  await invoke("ready");
+  setInterval(async () => {
+    if (!document.hasFocus()) return;
+    const before = JSON.stringify(perms);
+    await refreshPerms();
+    if (JSON.stringify(perms) !== before) render();
+  }, 2000);
+})();
+</script>
+</body>
+</html>

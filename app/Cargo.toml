@@ -1,0 +1,35 @@
+[package]
+name = "agent-snap"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Token-efficient screen recording for coding agents"
+default-run = "agent-snap"
+
+[[bin]]
+name = "agent-snap"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+agent-snap-core = { path = "../crates/core" }
+anyhow.workspace = true
+log.workspace = true
+env_logger.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }
+ctrlc = "3"
+arboard = { version = "3", default-features = false }
+dirs = "6"
+tauri = { version = "2", features = ["tray-icon", "image-png", "macos-private-api"] }
+tauri-plugin-positioner = { version = "2", features = ["tray-icon"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+agent-snap-macos = { path = "../crates/macos" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+agent-snap-windows = { path = "../crates/windows" }
+windows-sys = { version = "0.60", features = ["Win32_System_Console", "Win32_Foundation"] }

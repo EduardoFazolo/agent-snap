@@ -1,5 +1,4 @@
 # build
-.build/
 .swiftpm/
 dist/
 *.xcodeproj
@@ -16,3 +15,7 @@ sessions/
 *.p12
 *.key
 *.crt
+target/
+node_modules/
+smoke/
+app/gen/schemas/
