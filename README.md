@@ -1,50 +1,56 @@
+<div align="center">
+
+<img src="docs/logo.svg" width="104" alt="agent-snap">
+
 # agent-snap
 
-Show a coding agent what you just did on screen, without burning your whole context on screenshots.
+**Show your agent what you just did.**<br>
+Screen recordings turned into token-cheap prompts your agent can actually read.
 
-Your agent can't see your screen. So you end up describing the bug in words, or pasting
-screenshots. Words miss things. Screenshots are heavy and go blurry once they get downscaled,
-and you need a bunch of them to tell a story.
+![macOS](https://img.shields.io/badge/macOS-ready-30a14e)
+![Windows](https://img.shields.io/badge/Windows-untested-d97706)
+![license](https://img.shields.io/badge/license-MIT-4f46e5)
+![built with Rust](https://img.shields.io/badge/built%20with-Rust-dea584)
 
-agent-snap records what you do as a normal screen video, plus a log of every click, keystroke,
-scroll and window switch. Then it turns that into `flow.md`: a short flowchart of what happened,
-with cropped before/after images, labels and arrows. You paste that one file into any agent.
+<img src="docs/example/recording.gif" width="760" alt="agent-snap recording a demo">
 
-The video is the source of truth. Everything in `flow.md` is built from it, so nothing gets
-made up. Works on any app, native or web, because it reads the screen, not the DOM.
+</div>
 
-Rough cost: three full screenshots are about 4.8k tokens and unreadable after downscale. One
-agent-snap composite is about 1.4k tokens and you can actually read it.
+Your agent can't see your screen, so you describe the bug in words or paste screenshots. Words
+miss things. Screenshots are heavy and go blurry after downscale, and you need a pile of them.
+
+agent-snap records a normal screen video plus a log of every click, keystroke, scroll and window
+switch, then turns it into `flow.md`: a short flowchart with cropped before/after images, labels
+and arrows. You paste that one file into any agent.
+
+The video is the source of truth, so nothing in `flow.md` is made up. Works on any app, native
+or web, because it reads the screen, not the DOM. Three full screenshots run about 4.8k tokens
+and blur out. One agent-snap composite is about 1.4k tokens and you can read it.
 
 macOS today. Windows backend is written but not tested on real hardware yet.
 
 ## Example
 
-I filled in an expense form and switched a couple of tabs on a small demo page. 24 seconds.
-agent-snap turned it into a `flow.md` of about **5,200 tokens**: four images and eleven step
-lines. That whole thing is the prompt you paste into an agent.
+The clip above is 24 seconds: fill in an expense form, switch a couple of tabs, on a small demo
+page. agent-snap turned it into a `flow.md` of about **5,200 tokens**, four images and eleven
+step lines. That whole thing is the prompt.
 
-![recording](docs/example/recording.gif)
-
-*(compressed clip that ships in the repo. Full-res: [recording.mp4](docs/example/recording.mp4))*
-
-Here is what the agent actually reads, [`docs/example/flow.md`](docs/example/flow.md) plus these
-four images:
+Here is what the agent reads, [`docs/example/flow.md`](docs/example/flow.md) plus these four
+images:
 
 ![step 1](docs/example/composites/run-01-a.png)
 ![step 2](docs/example/composites/run-01-b.png)
 ![step 3](docs/example/composites/run-01-c.png)
 ![step 4](docs/example/composites/run-01-d.png)
 
-Every click and keystroke gets a label and an arrow pointing at it. When the app doesn't hand
-over a name for what you clicked, agent-snap reads the text off the pixels instead (you'll see
-"text read from screen"). So it names the Category dropdown opening, the value landing on
-Travel, the Billable checkbox getting ticked, and both tab switches, same as it would in a
-native app.
+Every click and keystroke gets a label and an arrow. When the app doesn't hand over a name for
+what you clicked, agent-snap reads the text off the pixels instead (you'll see "text read from
+screen"). So it names the Category dropdown opening, the value landing on Travel, the Billable
+checkbox getting ticked, and both tab switches.
 
-The whole example is reproducible. `smoke/run.sh` serves the page, opens a throwaway Chrome,
-records with agent-snap, and drives the form with real mouse and keyboard. `smoke/` is
-gitignored, only the finished result in `docs/example/` is committed.
+Reproducible: `smoke/run.sh` serves the page, opens a throwaway Chrome, records, and drives the
+form with real mouse and keyboard. `smoke/` is gitignored, only the finished result in
+`docs/example/` is committed.
 
 ## Use it
 
