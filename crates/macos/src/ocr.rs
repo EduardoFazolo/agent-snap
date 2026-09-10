@@ -40,7 +40,7 @@ impl VisionOcr {
 
         let request = VNRecognizeTextRequest::new();
         request.setRecognitionLevel(VNRequestTextRecognitionLevel::Accurate);
-        request.setUsesLanguageCorrection(false);
+        request.setUsesLanguageCorrection(true);
         let handler = unsafe {
             VNImageRequestHandler::initWithCGImage_options(VNImageRequestHandler::alloc(), &img, &NSDictionary::new())
         };

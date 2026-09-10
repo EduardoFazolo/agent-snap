@@ -107,6 +107,14 @@ pub enum StepKind {
 
 impl StepKind {
     /// The Swift `rawValue`, used in file names.
+    /// Steps caused by the user's hands, as opposed to synthesized or observed ones.
+    pub fn is_input(&self) -> bool {
+        matches!(
+            self,
+            StepKind::Click | StepKind::DoubleClick | StepKind::RightClick | StepKind::Drag | StepKind::Type | StepKind::Key | StepKind::Scroll
+        )
+    }
+
     pub fn as_str(&self) -> &'static str {
         match self {
             StepKind::Click => "click",

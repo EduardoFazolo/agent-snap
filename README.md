@@ -33,6 +33,36 @@ recorded. When you stop, it builds `flow.md` and offers Copy prompt / Open / Rev
 Paste that into any agent. Images cannot travel through the clipboard, so the agent
 reads the file and follows the image links itself.
 
+## Example
+
+A 24-second recording of someone filling in an expense form and switching tabs, on a
+small demo page (`smoke/index.html`). agent-snap turned it into `flow.md` at about
+**5,200 tokens**: four composites plus eleven step lines. That is the whole prompt you
+paste into an agent.
+
+<video src="https://raw.githubusercontent.com/EduardoFazolo/agent-snap/main/docs/example/recording.mp4" controls width="900"></video>
+
+If the player does not load, [download the clip](docs/example/recording.mp4).
+
+The recording above is the compressed clip that ships in the repo. What the agent actually
+reads is [`docs/example/flow.md`](docs/example/flow.md) and its four composites:
+
+![step 1](docs/example/composites/run-01-a.png)
+![step 2](docs/example/composites/run-01-b.png)
+![step 3](docs/example/composites/run-01-c.png)
+![step 4](docs/example/composites/run-01-d.png)
+
+Every click and keystroke is labelled and pointed at with an arrow. Where the app gave no
+usable accessibility name, the label is read from the pixels under the cursor (marked "text
+read from screen"), so it works the same on a native app or a web page. The category
+dropdown opening and the value landing on Travel, the billable checkbox being ticked, and
+the two tab switches all survive into the flow.
+
+The test is reproducible: `smoke/run.sh` serves the page, opens a throwaway Chrome window,
+records with agent-snap, and drives the form with real mouse and keyboard events (a small
+signed helper in `smoke/`, since screen-recording input taps only see real OS events). The
+`smoke/` folder is gitignored; only the finished example under `docs/example/` is committed.
+
 ## CLI
 
 ```sh

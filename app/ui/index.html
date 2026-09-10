@@ -67,7 +67,7 @@
   .row + .row { margin-top: 5px; }
   .row .label { flex: 1; color: var(--dim); }
   .row .val { color: var(--fg); font-variant-numeric: tabular-nums; }
-  .path { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+  .path { font-size: 11px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   /* switch */
   .sw { width: 34px; height: 20px; border-radius: 10px; background: var(--field); position: relative; transition: background 0.12s; flex: none; }
@@ -190,12 +190,14 @@ const { listen } = window.__TAURI__.event;
 let snap = null;         // live state from Rust
 let perms = { screen: true, ax: true };
 let browse = 0;          // 0 = now, 1..N = sessions[browse-1]
-let showSettings = false;
+let showSettings = true;   // "now" is the settings position; older slots show that recording
 let lastH = 0;
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const shortTokens = (t) => (t >= 1000 ? (t / 1000).toFixed(1) + "k" : String(t));
+// Paths matter at the tail, so drop characters from the front.
+const tailPath = (p, max = 42) => (p.length <= max ? p : "…" + p.slice(-(max - 1)));
 
 function sessionCount() { return snap && snap.sessions ? snap.sessions.length : 0; }
 function browsed() { return browse > 0 ? snap.sessions[browse - 1] : null; }
@@ -241,7 +243,7 @@ function renderSettings() {
   $("settings").classList.toggle("hidden", !show);
   if (!show || !snap) return;
   const o = snap.options;
-  $("outDir").textContent = snap.outputDirShort;
+  $("outDir").textContent = tailPath(snap.outputDirShort, 30);
   $("outDir").title = snap.options.outputDir;
   $("swTyped").classList.toggle("on", o.captureTypedText);
   $("swUrls").classList.toggle("on", o.captureURLs);
@@ -260,7 +262,7 @@ function doneCard(path, pathShort, steps, tokens, duration, title) {
   return `<div class="card">
       <div class="title">${esc(title)}</div>
       <div class="sub">${esc(bits.join(" · "))}</div>
-      <div class="path" style="margin-top:4px" title="${esc(path)}">${esc(pathShort || path)}</div>
+      <div class="path" style="margin-top:4px" title="${esc(path)}">${esc(tailPath(pathShort || path))}</div>
       <div class="actions">
         <button class="done" data-act="copy" data-path="${esc(path)}">Copy prompt</button>
         <button data-act="open" data-path="${esc(path)}">Open</button>
@@ -306,11 +308,10 @@ function renderStatus() {
       el.innerHTML = `<div class="err">${esc(snap.message || "failed")}</div>`;
       break;
     default: {
-      const s = (snap.sessions || [])[0];
-      el.innerHTML = s
-        ? `<div class="row"><span class="label">Last recording</span><span class="val" style="font-size:11px">${esc(s.name)}</span></div>` +
-          doneCard(s.flow, s.flowShort, s.steps, s.tokens, s.duration, "flow.md")
-        : `<div class="row"><span class="label">Ready. Hit REC, do the thing, hit STOP.</span></div>`;
+      const n = sessionCount();
+      el.innerHTML =
+        `<div class="row"><span class="label">Ready. Hit REC, do the thing, hit STOP.</span></div>` +
+        (n ? `<div class="last">${n} past recording${n === 1 ? "" : "s"} · &lsaquo; to browse</div>` : "");
     }
   }
 }

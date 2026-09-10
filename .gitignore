@@ -19,3 +19,6 @@ target/
 node_modules/
 smoke/
 app/gen/schemas/
+
+# committed demo clip (overrides *.mp4 above)
+!docs/example/recording.mp4

@@ -214,7 +214,13 @@ impl Builder {
             self.sort_steps();
             for i in 0..self.session.steps.len() {
                 let mut s = self.session.steps[i].clone();
-                self.extract_frames(&mut s);
+                // An "after" frame must never reach into the next input: whatever that input
+                // changed is its own step, not this one's.
+                let next_input = self.session.steps[i + 1..]
+                    .iter()
+                    .find(|n| n.kind.is_input())
+                    .map(|n| n.t);
+                self.extract_frames(&mut s, next_input);
                 self.label_by_ocr(&mut s);
                 self.session.steps[i] = s;
             }
@@ -395,15 +401,23 @@ impl Builder {
         }
     }
 
-    fn extract_frames(&mut self, s: &mut Step) {
+    fn extract_frames(&mut self, s: &mut Step, next_input: Option<f64>) {
         if self.frames.is_none() {
             return;
         }
         let n = format!("s{:04}-{}", (s.t * 10.0) as i64, s.kind.as_str());
         let end = s.end();
+        // Settle, but stop one frame short of the next input.
+        let settle = |b: &Self, from: f64| -> f64 {
+            let t = b.settle_time(from);
+            match next_input {
+                Some(n) if n - 0.03 > from => t.min(n - 0.03),
+                _ => t,
+            }
+        };
         match s.kind {
             StepKind::WindowSwitch => {
-                s.after_t = Some(self.settle_time(s.t));
+                s.after_t = Some(settle(self, s.t));
                 s.after = self.save_frame(s.after_t.unwrap(), &n, "after");
             }
             StepKind::Cursor => {
@@ -413,18 +427,23 @@ impl Builder {
             StepKind::ScreenUpdate => {
                 s.before_t = Some(s.t - 0.03);
                 s.before = self.save_frame(s.before_t.unwrap(), &n, "before");
-                s.after_t = Some(self.settle_time(s.t));
+                s.after_t = Some(settle(self, s.t));
                 s.after = self.save_frame(s.after_t.unwrap(), &n, "after");
                 s.dirty = self.dirty_union(s.before_t.unwrap(), s.after_t.unwrap());
             }
             _ => {
                 s.before_t = Some(s.t - 0.03);
                 s.before = self.save_frame(s.before_t.unwrap(), &n, "before");
-                s.after_t = Some(self.settle_time(end));
+                s.after_t = Some(settle(self, end));
                 s.after = self.save_frame(s.after_t.unwrap(), &n, "after");
                 s.dirty = self.dirty_union(s.before_t.unwrap(), s.after_t.unwrap());
             }
         }
+    }
+
+    /// A frame straight from the video, not written to disk.
+    fn frame_image(&mut self, t: f64) -> Option<Arc<RgbaImage>> {
+        self.frames.as_mut()?.frame(t)
     }
 
     fn save_frame(&mut self, t: f64, n: &str, suffix: &str) -> Option<String> {
@@ -443,6 +462,9 @@ impl Builder {
             busy.push((s.t - 0.1, self.settle_time(s.end()) + 1.0));
         }
         let switches: Vec<f64> = self.session.steps.iter().filter(|s| s.kind == StepKind::WindowSwitch).map(|s| s.t).collect();
+        // A screen change before the user's first action is recording warm-up, not a reaction to
+        // anything they did. Only synthesize updates once real input has happened.
+        let first_input = self.session.steps.iter().filter(|s| s.kind.is_input()).map(|s| s.t).fold(f64::INFINITY, f64::min);
         let fs = self.session.frames.clone();
         let mut extra: Vec<Step> = Vec::new();
         let mut i = 0;
@@ -453,7 +475,7 @@ impl Builder {
             if (d.area() as f64) / total < SCREEN_UPDATE_FRACTION {
                 continue;
             }
-            if f.t <= 1.0 || switches.iter().any(|s| f.t - s > -0.1 && f.t - s < 1.5) || busy.iter().any(|b| f.t >= b.0 && f.t <= b.1) {
+            if f.t <= 1.0 || f.t < first_input || switches.iter().any(|s| f.t - s > -0.1 && f.t - s < 1.5) || busy.iter().any(|b| f.t >= b.0 && f.t <= b.1) {
                 continue;
             }
             let win = self
@@ -494,6 +516,18 @@ impl Builder {
         Self::WEAK_ROLES.contains(&role)
     }
 
+    /// Last time in the 5s before `t` when the pointer was well away from `p`, if any.
+    fn uncovered_time(&self, p: PointI, t: f64) -> Option<f64> {
+        let reach = CURSOR_RADIUS + 20.0;
+        self.session
+            .cursor
+            .iter()
+            .rev()
+            .filter(|c| c.t < t && c.t > t - 5.0)
+            .find(|c| ((c.x - p.x).pow(2) + (c.y - p.y).pow(2)) as f64 > reach * reach)
+            .map(|c| c.t)
+    }
+
     /// Reads the text under/near the click from the pixels when the app gave no usable name.
     fn label_by_ocr(&mut self, s: &mut Step) {
         let Some(ocr) = self.ocr.clone() else { return };
@@ -501,9 +535,15 @@ impl Builder {
             return;
         }
         let (Some(p), Some(path)) = (s.point, s.before.clone()) else { return };
-        let Some(img) = self.load_image(&path) else { return };
+        // At click time the pointer sits on the very text we want to read. Prefer the last
+        // moment before the click when the pointer was still clear of it.
+        let img = match self.uncovered_time(p, s.t) {
+            Some(t) => self.frame_image(t).or_else(|| self.load_image(&path)),
+            None => self.load_image(&path),
+        };
+        let Some(img) = img else { return };
         let (w, h) = (img.width() as f64, img.height() as f64);
-        let crop = Rect::new((p.x as f64 - 320.0).max(0.0), (p.y as f64 - 110.0).max(0.0), 640.0, 220.0);
+        let crop = Rect::new((p.x as f64 - 600.0).max(0.0), (p.y as f64 - 110.0).max(0.0), 1200.0, 220.0);
         let Some(crop) = crop.intersection(&Rect::new(0.0, 0.0, w, h)) else { return };
         let ci = imageops::crop_imm(&*img, crop.x as u32, crop.y as u32, crop.w as u32, crop.h as u32).to_image();
         let obs = ocr.recognize(&ci);
@@ -511,21 +551,26 @@ impl Builder {
             return;
         }
         let local = (p.x as f64 - crop.x, p.y as f64 - crop.y);
-        let mut best: Option<(String, f64)> = None;
+        // (text, distance, off-row): same-row text outranks text above or below at any distance.
+        let mut best: Option<(String, f64, bool)> = None;
         for o in obs {
             let r = Rect::from_i(&o.bounds);
-            let dist = if r.inset(-12.0, -12.0).contains_point(local.0, local.1) {
-                0.0
+            let (dist, same_row) = if r.inset(-12.0, -12.0).contains_point(local.0, local.1) {
+                (0.0, true)
             } else {
                 let dx = (r.x - local.0).max(0.0).max(local.0 - r.max_x());
                 let dy = (r.y - local.1).max(0.0).max(local.1 - r.max_y());
-                (dx * dx + dy * dy).sqrt()
+                ((dx * dx + dy * dy).sqrt(), dy == 0.0)
             };
-            if dist <= 90.0 && best.as_ref().is_none_or(|b| dist < b.1) {
-                best = Some((o.text.clone(), dist));
+            // Text on the same row as the click (a field's own text, a row label) counts even
+            // when the click landed in the middle of a wide control.
+            let reach = if same_row { 600.0 } else { 90.0 };
+            let key = (!same_row, dist);
+            if dist <= reach && best.as_ref().is_none_or(|b| key < (b.2, b.1)) {
+                best = Some((o.text.clone(), dist, !same_row));
             }
         }
-        let Some((text, dist)) = best else { return };
+        let Some((text, dist, _)) = best else { return };
         let t = text.trim();
         if t.is_empty() {
             return;
