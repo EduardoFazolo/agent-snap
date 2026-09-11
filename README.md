@@ -16,18 +16,13 @@ Screen recordings turned into token-cheap prompts your agent can actually read.
 
 </div>
 
-Your agent can't see your screen, so you describe the bug in words or paste screenshots. Words
-miss things. Screenshots are heavy and go blurry after downscale, and you need a pile of them.
-
-agent-snap records a normal screen video plus a log of every click, keystroke, scroll and window
-switch, then turns it into `flow.md`: a short flowchart with cropped before/after images, labels
-and arrows. You paste that one file into any agent.
-
-The video is the source of truth, so nothing in `flow.md` is made up. Works on any app, native
-or web, because it reads the screen, not the DOM. Three full screenshots run about 4.8k tokens
-and blur out. One agent-snap composite is about 1.4k tokens and you can read it.
-
-macOS today. Windows backend is written but not tested on real hardware yet.
+- **The problem.** Your agent can't see your screen. Words miss things, screenshots are heavy and blur out after downscale.
+- **What it does.** Records a screen video plus every click, keystroke, scroll and window switch, then turns it into `flow.md`: a short flowchart with cropped before/after images, labels and arrows.
+- **How you use it.** Paste that one file into any agent.
+- **No hallucinating.** The video is the source of truth, so nothing in `flow.md` is made up.
+- **Any app.** Native or web, because it reads the screen, not the DOM.
+- **Cheap.** Three full screenshots run about 4.8k tokens and blur out. One composite is about 1.4k tokens and you can read it.
+- **Platforms.** macOS today. Windows backend is written but not tested on real hardware yet.
 
 ## Example
 
