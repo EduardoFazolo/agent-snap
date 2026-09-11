@@ -375,6 +375,12 @@ impl Worker {
                 return;
             }
         }
+        // The click landed on our own UI (tray icon, its menu, the popover), which lives in this
+        // process but isn't the frontmost app window, so the checks above miss it.
+        if matches!(raw.kind, RawKind::Down(_)) && self.tracker.owns_point(raw.x, raw.y) {
+            self.pending_ignored = true;
+            return;
+        }
         self.pending_ignored = false;
         if self.pending.is_some() {
             return;

@@ -28,8 +28,9 @@ use windows::Win32::UI::Accessibility::{
     UIA_TreeItemControlTypeId, UIA_ValuePatternId, UIA_CONTROLTYPE_ID,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId,
+    GetForegroundWindow, GetWindowRect, GetWindowTextW, GetWindowThreadProcessId, WindowFromPoint,
 };
+use windows::Win32::System::Threading::GetCurrentProcessId;
 
 use crate::dpi;
 
@@ -158,6 +159,20 @@ impl WindowTracker for UiaWindowTracker {
     fn focused_is_secure(&mut self) -> bool {
         // SAFETY: COM calls on live objects.
         with_uia(|uia| unsafe { Ok(uia.GetFocusedElement()?.CurrentIsPassword()?.as_bool()) }).unwrap_or(false)
+    }
+
+    fn owns_point(&mut self, x: f64, y: f64) -> bool {
+        let scale = dpi::primary_scale();
+        let pt = POINT { x: (x * scale) as i32, y: (y * scale) as i32 };
+        // SAFETY: POINT passed by value; the returned HWND is only inspected.
+        let hwnd = unsafe { WindowFromPoint(pt) };
+        if hwnd.0.is_null() {
+            return false;
+        }
+        let mut pid = 0u32;
+        // SAFETY: live out-pointer.
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&mut pid)) };
+        pid != 0 && pid == unsafe { GetCurrentProcessId() }
     }
 
     fn tab_url(&mut self, window: &WindowInfo) -> Option<String> {

@@ -347,6 +347,14 @@ impl WindowTracker for MacWindowTracker {
             || attr_string(&e, "AXRole").as_deref() == Some("AXSecureTextField")
     }
 
+    fn owns_point(&mut self, x: f64, y: f64) -> bool {
+        // The element under the point belongs to our own process (tray icon, its menu, popover).
+        let Some(el) = element_at(&Self::system_wide(), x, y) else { return false };
+        let mut pid: libc::pid_t = 0;
+        let err = unsafe { el.pid(NonNull::from(&mut pid)) };
+        err == AXError::Success && pid == unsafe { libc::getpid() }
+    }
+
     fn tab_url(&mut self, window: &WindowInfo) -> Option<String> {
         let script = BROWSER_SCRIPTS.iter().find(|(b, _)| *b == window.bundle_id).map(|(_, s)| *s)?;
         let key = format!("{}|{}", window.bundle_id, window.title);

@@ -131,6 +131,12 @@ pub trait WindowTracker: Send {
     fn focused_is_secure(&mut self) -> bool;
     /// URL of the active browser tab for this window, if it is a known browser. Cached by the implementation.
     fn tab_url(&mut self, window: &WindowInfo) -> Option<String>;
+    /// True when the UI element at this screen point (in points) belongs to the recorder's own
+    /// process: our tray icon, its menu, our popover. Lets the recorder drop interactions with
+    /// its own UI without relying on a static rect. Default false for backends that can't tell.
+    fn owns_point(&mut self, _x: f64, _y: f64) -> bool {
+        false
+    }
 }
 
 #[derive(Clone, Debug)]

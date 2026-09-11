@@ -238,9 +238,13 @@ impl Builder {
         );
         if let Some(v) = &self.session.video {
             md += &format!("- video: {} (full recording; timestamps below index into it)\n", self.dir.join(v).display());
+            md += &format!(
+                "- frames: {}/frames/ hold a full-screen before/after PNG per step, named `s<step time in tenths of a second>-<action>-before.png` / `-after.png` (step at 00:02.2 -> `s0022`). Open one only to zoom into an unclear step.\n",
+                self.dir.display()
+            );
         }
         md += &format!("- {} steps across {} window visits\n{{{{COST}}}}\n", self.session.steps.len(), runs.len());
-        md += "The images shown inline are the flow. The full frames and video listed under each section are only for zooming in if a step is unclear.\n\n";
+        md += "The images shown inline are the flow. The frames directory and video above are only for zooming into a step that is unclear.\n\n";
 
         let mut run_no = 0;
         for mut run in runs {
@@ -278,19 +282,6 @@ impl Builder {
                 }
                 md += &line;
                 md += "\n";
-            }
-            let mut seen = HashSet::new();
-            let files: Vec<String> = run
-                .steps
-                .iter()
-                .flat_map(|s| [s.before.clone(), s.after.clone()])
-                .flatten()
-                .filter(|f| seen.insert(f.clone()))
-                .collect();
-            if !files.is_empty() {
-                md += "\n<details><summary>full frames</summary>\n\n";
-                md += &files.iter().map(|f| format!("- {}", self.dir.join(f).display())).collect::<Vec<_>>().join("\n");
-                md += "\n\n</details>\n";
             }
             md += "\n";
         }
